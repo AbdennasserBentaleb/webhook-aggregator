@@ -1,0 +1,66 @@
+spring:
+  application:
+    name: webhook-aggregator
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    listener:
+      simple:
+        retry:
+          enabled: true
+          initial-interval: 1000ms
+          max-attempts: 3
+          max-interval: 10000ms
+          multiplier: 2.0
+        acknowledge-mode: auto
+        default-requeue-rejected: false
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+
+server:
+  port: 8080
+  shutdown: graceful
+
+webhook:
+  queue:
+    name: incoming-webhooks
+    exchange: webhook-exchange
+    routing-key: webhook.incoming
+  rate-limit:
+    requests-per-second: 50
+    bucket-capacity: 50
+  security:
+    hmac-secret: ${WEBHOOK_HMAC_SECRET:dev-secret-key}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+
+logging:
+  structured:
+    format:
+      console: logstash
+  level:
+    com.resilient.webhook: DEBUG
+    org.springframework.amqp: INFO
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      webhookProcessor:
+        registerHealthIndicator: true
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        permittedNumberOfCallsInHalfOpenState: 3
+        waitDurationInOpenState: 10s
+        failureRateThreshold: 50
+        eventConsumerBufferSize: 10
