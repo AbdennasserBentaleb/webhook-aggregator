@@ -1,0 +1,20 @@
+services:
+  rabbitmq:
+    image: rabbitmq:4.0-management-alpine
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-webhook_admin}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-secure_pass_123}
+
+  webhook-aggregator:
+    image: abdennasserbentaleb/webhook-aggregator:0.0.1-SNAPSHOT
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+    depends_on:
+      - rabbitmq
