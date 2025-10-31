@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Webhook Aggregator — Live Dashboard</title>
+  <meta name="description" content="Real-time operational dashboard for the Webhook Aggregator service. Monitor incoming webhooks, rate limiting, and circuit breaker state."/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --surface2: #1f2937;
+      --border: #30363d;
+      --accent: #00c9a7;
+      --accent2: #7c6aef;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --success: #3fb950;
+      --warning: #d29922;
+      --danger: #f85149;
+      --radius: 12px;
+    }
+
+    html, body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      min-height: 100vh;
+      line-height: 1.6;
+    }
+
+    /* ── HEADER ── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 40px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      backdrop-filter: blur(12px);
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo-icon {
+      width: 38px;
+      height: 38px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+    }
+
+    .logo-text h1 {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: -0.3px;
+    }
+
+    .logo-text p {
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 400;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .status-dot {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--success);
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.6; transform: scale(1.2); }
+    }
+
+    /* ── MAIN ── */
+    main {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 36px 40px;
+    }
+
+    .section-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1.2px;
+      color: var(--muted);
+      margin-bottom: 16px;
+    }
+
+    /* ── STAT CARDS ── */
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 36px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      position: relative;
+      overflow: hidden;
+      transition: border-color 0.3s, transform 0.2s;
+    }
+
+    .card:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+    }
+
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .card:hover::before { opacity: 1; }
+
+    .card-icon {
+      font-size: 22px;
+      margin-bottom: 12px;
+    }
+
+    .card-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    .card-value {
+      font-size: 36px;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--text);
+      line-height: 1;
+      transition: color 0.3s;
+    }
+
+    .card-sub {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 6px;
+    }
+
+    /* Circuit Breaker states */
+    .state-CLOSED  { color: var(--success); }
+    .state-HALF_OPEN { color: var(--warning); }
+    .state-OPEN    { color: var(--danger); }
+    .state-UNKNOWN { color: var(--muted); }
+
+    /* ── CONTROLS ── */
+    .controls-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 36px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 22px;
+      border-radius: 8px;
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
+      text-decoration: none;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), #00a88a);
+      color: #0d1117;
+      box-shadow: 0 0 20px rgba(0, 201, 167, 0.25);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 0 30px rgba(0, 201, 167, 0.4);
+    }
+
+    .btn-primary:active { transform: translateY(0); }
+
+    .btn-primary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .btn-outline {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .btn-outline:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    /* Burst group */
+    .burst-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .burst-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .btn-preset {
+      background: rgba(0, 201, 167, 0.1);
+      color: var(--accent);
+      border: 1px solid rgba(0, 201, 167, 0.3);
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-family: 'Inter', sans-serif;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-preset:hover {
+      background: rgba(0, 201, 167, 0.2);
+      border-color: var(--accent);
+      transform: translateY(-1px);
+    }
+
+    .btn-preset:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .custom-fire {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-left: 6px;
+      padding-left: 14px;
+      border-left: 1px solid var(--border);
+    }
+
+    .custom-input {
+      width: 100px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      padding: 8px 12px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .custom-input:focus {
+      border-color: var(--accent);
+    }
+
+    .custom-input::-webkit-inner-spin-button { opacity: 0.5; }
+
+    .spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(0,0,0,0.3);
+      border-top-color: #0d1117;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .toast {
+      font-size: 12px;
+      color: var(--accent);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .toast.show { opacity: 1; }
+
+    /* ── EVENT FEED ── */
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin-bottom: 36px;
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface2);
+    }
+
+    .panel-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .badge {
+      font-size: 11px;
+      font-weight: 600;
+      font-family: 'JetBrains Mono', monospace;
+      background: rgba(0, 201, 167, 0.1);
+      color: var(--accent);
+      border: 1px solid rgba(0, 201, 167, 0.2);
+      padding: 2px 8px;
+      border-radius: 20px;
+    }
+
+    .feed-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .feed-table th {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--muted);
+      padding: 10px 20px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface2);
+    }
+
+    .feed-table td {
+      padding: 12px 20px;
+      font-size: 12px;
+      border-bottom: 1px solid rgba(48, 54, 61, 0.5);
+      white-space: nowrap;
+    }
+
+    .feed-table tr:last-child td { border-bottom: none; }
+
+    .feed-table tr {
+      transition: background 0.2s;
+    }
+
+    .feed-table tr:hover td {
+      background: rgba(255,255,255,0.02);
+    }
+
+    .feed-table tr.new-row {
+      animation: slideIn 0.4s ease-out;
+    }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(-8px); background: rgba(0, 201, 167, 0.05); }
+      to   { opacity: 1; transform: translateY(0);    background: transparent; }
+    }
+
+    .event-id {
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .event-type-chip {
+      display: inline-block;
+      padding: 2px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 500;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Type colours */
+    .chip-order    { background: rgba(124,106,239,0.15); color: #a78bfa; border: 1px solid rgba(124,106,239,0.2); }
+    .chip-payment  { background: rgba(63,185,80,0.12);  color: #3fb950; border: 1px solid rgba(63,185,80,0.2); }
+    .chip-user     { background: rgba(0,201,167,0.12);  color: var(--accent); border: 1px solid rgba(0,201,167,0.2); }
+    .chip-shipment { background: rgba(210,153,34,0.12); color: #d29922; border: 1px solid rgba(210,153,34,0.2); }
+    .chip-invoice  { background: rgba(248,81,73,0.12);  color: #f85149; border: 1px solid rgba(248,81,73,0.2); }
+    .chip-subscription { background: rgba(59,130,246,0.12); color: #60a5fa; border: 1px solid rgba(59,130,246,0.2); }
+    .chip-default  { background: rgba(139,148,158,0.12); color: var(--muted); border: 1px solid rgba(139,148,158,0.2); }
+
+    .timestamp {
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--muted);
+    }
+
+    .empty-state .icon { font-size: 36px; margin-bottom: 12px; }
+    .empty-state p { font-size: 13px; }
+    .empty-state span { color: var(--accent); }
+
+    /* ── ARCHITECTURE DIAGRAM ── */
+    .arch-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 32px;
+      margin-bottom: 36px;
+    }
+
+    .arch-flow {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0;
+      flex-wrap: wrap;
+    }
+
+    .arch-node {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px 22px;
+      text-align: center;
+      min-width: 140px;
+      transition: border-color 0.3s;
+    }
+
+    .arch-node:hover { border-color: var(--accent); }
+    .arch-node .n-icon { font-size: 24px; margin-bottom: 6px; }
+    .arch-node .n-title { font-size: 12px; font-weight: 600; color: var(--text); }
+    .arch-node .n-sub { font-size: 10px; color: var(--muted); margin-top: 2px; }
+
+    .arch-arrow {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 0 6px;
+      color: var(--accent);
+      font-size: 18px;
+    }
+
+    .arch-arrow span {
+      font-size: 9px;
+      color: var(--muted);
+      white-space: nowrap;
+      margin-top: 2px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* ── TECH STACK PILLS ── */
+    .tech-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 24px;
+    }
+
+    .tech-pill {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 4px 14px;
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    /* ── LINKS ROW ── */
+    .links-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 40px;
+    }
+
+    /* ── FOOTER ── */
+    footer {
+      text-align: center;
+      color: var(--muted);
+      font-size: 11px;
+      padding: 24px;
+      border-top: 1px solid var(--border);
+    }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 900px) {
+      .cards-grid { grid-template-columns: repeat(2, 1fr); }
+      main { padding: 24px 20px; }
+      header { padding: 16px 20px; }
+    }
+    @media (max-width: 500px) {
+      .cards-grid { grid-template-columns: 1fr; }
+      .arch-flow { flex-direction: column; gap: 8px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">⚡</div>
+    <div class="logo-text">
+      <h1>Webhook Aggregator</h1>
+      <p>Live Operational Dashboard</p>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="status-dot">
+      <div class="dot" id="liveIndicator"></div>
+      <span id="lastRefresh">Connecting...</span>
+    </div>
+  </div>
+</header>
+
+<main>
+
+  <!-- STAT CARDS -->
+  <p class="section-title">Live Metrics</p>
+  <div class="cards-grid">
+    <div class="card">
+      <div class="card-icon">📥</div>
+      <div class="card-label">Total Processed</div>
+      <div class="card-value" id="processedCount">—</div>
+      <div class="card-sub">Webhooks consumed from queue</div>
+    </div>
+    <div class="card">
+      <div class="card-icon">🪣</div>
+      <div class="card-label">Token Bucket</div>
+      <div class="card-value" id="rateLimitTokens">—</div>
+      <div class="card-sub">Remaining rate-limit tokens (cap: 50)</div>
+    </div>
+    <div class="card">
+      <div class="card-icon">🔌</div>
+      <div class="card-label">Circuit Breaker</div>
+      <div class="card-value state-CLOSED" id="circuitBreakerState">—</div>
+      <div class="card-sub" id="circuitBreakerSub">Resilience4j protection layer</div>
+    </div>
+    <div class="card">
+      <div class="card-icon">✅</div>
+      <div class="card-label">Active Consumers</div>
+      <div class="card-value" style="color: var(--success);">1</div>
+      <div class="card-sub">RabbitMQ listener threads</div>
+    </div>
+  </div>
+
+  <!-- CONTROLS -->
+  <p class="section-title">Actions</p>
+  <div class="controls-row">
+    <div class="burst-group">
+      <span class="burst-label">Fire Demo Burst:</span>
+      <button class="btn btn-preset" id="fireBtn20"  onclick="fireBurst(20)">🚀 20</button>
+      <button class="btn btn-preset" id="fireBtn50"  onclick="fireBurst(50)">🚀 50</button>
+      <button class="btn btn-preset" id="fireBtn100" onclick="fireBurst(100)">🚀 100</button>
+      <button class="btn btn-preset" id="fireBtn300" onclick="fireBurst(300)">🚀 300</button>
+      <div class="custom-fire">
+        <input type="number" id="customCount" class="custom-input" min="1" max="500" placeholder="Custom #" />
+        <button class="btn btn-primary" id="fireBtnCustom" onclick="fireCustom()">Fire</button>
+      </div>
+    </div>
+  </div>
+  <div class="controls-row" style="margin-top:-24px; margin-bottom: 24px;">
+    <a href="/swagger-ui.html" target="_blank" class="btn btn-outline">📖 Swagger UI</a>
+    <a href="http://localhost:15673" target="_blank" class="btn btn-outline">🐇 RabbitMQ Console</a>
+    <a href="/actuator/health" target="_blank" class="btn btn-outline">❤️ Health</a>
+    <span class="toast" id="toast"></span>
+  </div>
+
+  <!-- ARCHITECTURE -->
+  <p class="section-title">How It Works</p>
+  <div class="arch-panel">
+    <div class="arch-flow">
+      <div class="arch-node">
+        <div class="n-icon">🌐</div>
+        <div class="n-title">External Source</div>
+        <div class="n-sub">HTTP POST /v1/webhooks</div>
+      </div>
+      <div class="arch-arrow">→<span>HMAC-SHA256</span></div>
+      <div class="arch-node">
+        <div class="n-icon">🛡️</div>
+        <div class="n-title">Ingestion &amp; Validation</div>
+        <div class="n-sub">202 Accepted instantly</div>
+      </div>
+      <div class="arch-arrow">→<span>enqueue</span></div>
+      <div class="arch-node">
+        <div class="n-icon">🐇</div>
+        <div class="n-title">RabbitMQ</div>
+        <div class="n-sub">Durable queue + DLX</div>
+      </div>
+      <div class="arch-arrow">→<span>50 req/s</span></div>
+      <div class="arch-node">
+        <div class="n-icon">⚖️</div>
+        <div class="n-title">Token Bucket</div>
+        <div class="n-sub">Nanosecond precision</div>
+      </div>
+      <div class="arch-arrow">→<span>circuit breaker</span></div>
+      <div class="arch-node">
+        <div class="n-icon">⚙️</div>
+        <div class="n-title">Downstream</div>
+        <div class="n-sub">Protected API / Service</div>
+      </div>
+    </div>
+
+    <div class="tech-row">
+      <span class="tech-pill">Java 25</span>
+      <span class="tech-pill">Spring Boot 3.5</span>
+      <span class="tech-pill">RabbitMQ 4.0</span>
+      <span class="tech-pill">Resilience4j</span>
+      <span class="tech-pill">Testcontainers</span>
+      <span class="tech-pill">OpenAPI 3.1</span>
+      <span class="tech-pill">Docker</span>
+      <span class="tech-pill">Kubernetes</span>
+      <span class="tech-pill">Micrometer</span>
+    </div>
+  </div>
+
+  <!-- EVENT FEED -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">📡 Live Event Feed</span>
+      <span class="badge" id="feedCount">0 events</span>
+    </div>
+    <table class="feed-table">
+      <thead>
+        <tr>
+          <th>ID (prefix)</th>
+          <th>Event Type</th>
+          <th>Received At</th>
+        </tr>
+      </thead>
+      <tbody id="feedBody">
+        <tr>
+          <td colspan="3">
+            <div class="empty-state">
+              <div class="icon">📭</div>
+              <p>No webhooks processed yet.<br/>Click <span>🚀 Fire Demo Burst</span> to see the system in action.</p>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+</main>
+
+<footer>
+  Webhook Aggregator · Spring Boot · RabbitMQ · Resilience4j · Built for portfolio demonstration
+</footer>
+
+<script>
+  let previousCount = 0;
+  let previousIds = new Set();
+
+  function chipClass(eventType) {
+    const t = (eventType || '').toLowerCase();
+    if (t.startsWith('order'))        return 'chip-order';
+    if (t.startsWith('payment'))      return 'chip-payment';
+    if (t.startsWith('user'))         return 'chip-user';
+    if (t.startsWith('shipment'))     return 'chip-shipment';
+    if (t.startsWith('invoice'))      return 'chip-invoice';
+    if (t.startsWith('subscription')) return 'chip-subscription';
+    return 'chip-default';
+  }
+
+  function formatTs(iso) {
+    try {
+      const d = new Date(iso);
+      return d.toLocaleTimeString('en-GB', { hour12: false }) + '.' + String(d.getMilliseconds()).padStart(3, '0');
+    } catch { return iso; }
+  }
+
+  async function fetchDashboard() {
+    try {
+      const res = await fetch('/api/dashboard');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      render(data);
+      document.getElementById('lastRefresh').textContent = 'Live · ' + new Date().toLocaleTimeString();
+      document.getElementById('liveIndicator').style.background = 'var(--success)';
+    } catch (e) {
+      document.getElementById('lastRefresh').textContent = 'Reconnecting...';
+      document.getElementById('liveIndicator').style.background = 'var(--danger)';
+    }
+  }
+
+  function render(data) {
+    // Stat cards
+    const countEl = document.getElementById('processedCount');
+    const newCount = data.processedCount || 0;
+    if (newCount !== previousCount) {
+      countEl.style.color = 'var(--accent)';
+      countEl.textContent = newCount.toLocaleString();
+      setTimeout(() => { countEl.style.color = ''; }, 800);
+    } else {
+      countEl.textContent = newCount.toLocaleString();
+    }
+    previousCount = newCount;
+
+    const tokens = data.rateLimitTokens;
+    const tokEl = document.getElementById('rateLimitTokens');
+    tokEl.textContent = (tokens >= 0 ? tokens.toFixed(1) : '—');
+    tokEl.style.color = tokens < 10 ? 'var(--warning)' : '';
+
+    const cb = data.circuitBreakerState || 'UNKNOWN';
+    const cbEl = document.getElementById('circuitBreakerState');
+    cbEl.textContent = cb;
+    cbEl.className = 'card-value state-' + cb;
+    const cbSub = document.getElementById('circuitBreakerSub');
+    cbSub.textContent = cb === 'CLOSED' ? 'Healthy — passing all calls'
+                      : cb === 'HALF_OPEN' ? 'Probing — limited calls allowed'
+                      : cb === 'OPEN' ? 'Open — blocking calls to protect downstream'
+                      : 'Resilience4j protection layer';
+
+    // Event feed
+    const webhooks = data.recentWebhooks || [];
+    document.getElementById('feedCount').textContent = webhooks.length + ' event' + (webhooks.length !== 1 ? 's' : '');
+
+    if (webhooks.length === 0) {
+      document.getElementById('feedBody').innerHTML = `
+        <tr><td colspan="3">
+          <div class="empty-state">
+            <div class="icon">📭</div>
+            <p>No webhooks processed yet.<br/>Click <span>🚀 Fire Demo Burst</span> to see the system in action.</p>
+          </div>
+        </td></tr>`;
+      return;
+    }
+
+    const newIds = new Set(webhooks.map(w => w.id));
+    const tbody = document.getElementById('feedBody');
+    tbody.innerHTML = webhooks.map((w, i) => {
+      const isNew = !previousIds.has(w.id) && previousIds.size > 0;
+      return `<tr class="${isNew ? 'new-row' : ''}">
+        <td><span class="event-id">${w.id}…</span></td>
+        <td><span class="event-type-chip ${chipClass(w.eventType)}">${w.eventType}</span></td>
+        <td><span class="timestamp">${formatTs(w.receivedAt)}</span></td>
+      </tr>`;
+    }).join('');
+    previousIds = newIds;
+  }
+
+  function setAllPresetBtns(disabled) {
+    ['fireBtn20','fireBtn50','fireBtn100','fireBtn300','fireBtnCustom'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.disabled = disabled;
+    });
+  }
+
+  async function fireBurst(count) {
+    setAllPresetBtns(true);
+    const btn = document.getElementById('fireBtn' + count);
+    if (btn) { btn.innerHTML = '<span class="spinner"></span>'; }
+
+    try {
+      const res = await fetch('/api/demo/fire?count=' + count, { method: 'POST' });
+      const data = await res.json();
+      showToast('✓ ' + data.enqueued + ' webhooks enqueued!');
+    } catch (e) {
+      showToast('✗ Failed to fire burst');
+    } finally {
+      setTimeout(() => {
+        setAllPresetBtns(false);
+        if (btn) btn.innerHTML = '🚀 ' + count;
+      }, 2000);
+      await fetchDashboard();
+    }
+  }
+
+  async function fireCustom() {
+    const input = document.getElementById('customCount');
+    const count = parseInt(input.value, 10);
+    if (!count || count < 1 || count > 500) {
+      showToast('✗ Enter a number between 1 and 500');
+      return;
+    }
+    setAllPresetBtns(true);
+    const btn = document.getElementById('fireBtnCustom');
+    btn.innerHTML = '<span class="spinner"></span>';
+
+    try {
+      const res = await fetch('/api/demo/fire?count=' + count, { method: 'POST' });
+      const data = await res.json();
+      showToast('✓ ' + data.enqueued + ' webhooks enqueued!');
+      input.value = '';
+    } catch (e) {
+      showToast('✗ Failed to fire burst');
+    } finally {
+      setTimeout(() => {
+        setAllPresetBtns(false);
+        btn.innerHTML = 'Fire';
+      }, 2000);
+      await fetchDashboard();
+    }
+  }
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3500);
+  }
+
+  // Initial load + poll every 2s
+  fetchDashboard();
+  setInterval(fetchDashboard, 2000);
+</script>
+</body>
+</html>

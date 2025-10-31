@@ -2,8 +2,8 @@ services:
   rabbitmq:
     image: rabbitmq:4.0-management-alpine
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "5673:5672"
+      - "15673:15672"
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-webhook_admin}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-secure_pass_123}
@@ -16,5 +16,7 @@ services:
     environment:
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: ${RABBITMQ_USER:-webhook_admin}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASS:-secure_pass_123}
     depends_on:
       - rabbitmq
