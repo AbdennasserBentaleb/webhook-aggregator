@@ -133,3 +133,7 @@ The test suite heavily employs **Testcontainers** to spin up volatile instances 
 ```bash
 ./mvnw clean test
 ```
+
+
+### Forward-Compatibility Notice
+> **Note:** This project intentionally uses Java 25 (LTS Preview) and Spring Boot 3.4/3.5 to demonstrate forward-compatibility and readiness for the next LTS wave in enterprise environments.
